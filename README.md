@@ -1,18 +1,10 @@
 ## 使用须知
 
-- PHP7.x 请使用v1.0.0分支或者1.0.0发行版
-  ```
-  git clone -b v1.0.0 https://gitee.com/lfveeker/enc.git
-  ```
 - master分支已移除对PHP7.x的支持。
 
 ## 介绍
 
-- 一个简洁、高性能、跨平台的 PHP7 PHP8 代码加密扩展，当前版本为 1.0.1
-- 因 ``lihancong/enc``已不再维护，特开此项目对PHP7.4+进行支持
-
-## 特点
-
+- 特点
 - 简单快速，经实测，几乎不影响性能
 - 兼容 OPCache、Xdebug等其他扩展
 - 兼容 Linux、macOS、Windows等系统
