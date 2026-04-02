@@ -1,13 +1,9 @@
 /**
  * A high performance and cross-platform encrypt extension for PHP source code.
  *
- * @author:  Tony
- * @site:    lihancong.cn
- * @github:  github.com/lihancong/enc
+ * @author:  Mr.y7
+ * @email:    y7wanghui@gmail.com
  *
- * @Modifier:   DMLF
- * @site:       www.lfveeker.com
- * @gitee:     https://gitee.com/lfveeker/enc
  */
 
 /* Modify enc_header to disguise your encrypt file */
