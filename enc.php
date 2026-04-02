@@ -37,6 +37,13 @@ foreach ($argv as $fileName) {
 function handle($file)
 {
     if ($fp = fopen($file, 'rb+') and $fileSize = filesize($file)) {
+        $backupFile = $file . '.bak';
+        if (file_exists($backupFile)) {
+            unlink($backupFile); // 删除旧备份
+        }
+        if (!copy($file, $backupFile)) {
+            return false;
+        }
         $data = enc_encode(fread($fp, $fileSize));
         if ($data !== false) {
             if (file_put_contents($file, '') !== false) {
