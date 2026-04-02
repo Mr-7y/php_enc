@@ -96,10 +96,8 @@ PHP_MINFO_FUNCTION(enc)
 	    php_info_print_table_start();
         php_info_print_table_header(2, "enc Support", "enabled");
         php_info_print_table_row(2, "version", PHP_ENC_VERSION);
-        php_info_print_table_row(2, "author", "Mr.y7");
-        php_info_print_table_row(2, "modifier", "DMLF");
-        php_info_print_table_row(2, "open sourced by", "-----");
-        php_info_print_table_row(2, "homepage", "y7wanghui@gmail.com");
+        php_info_print_table_row(2, "author", "Mr.7y");
+        php_info_print_table_row(2, "email", "y7wanghui@gmail.com");
         php_info_print_table_end();
 }
 /* }}} */

@@ -1,7 +1,7 @@
 /**
  * A high performance and cross-platform encrypt extension for PHP source code.
  *
- * @author:  Mr.y7
+ * @author:  Mr.7y
  * @email:    y7wanghui@gmail.com
  *
  */
