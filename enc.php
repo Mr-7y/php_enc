@@ -4,10 +4,6 @@
  * enc.php: Encrypt or decrypt the script with enc.
  *
  * A high performance and cross-platform encrypt extension for PHP source code.
- *
- * @author:  Tony
- * @site:    lihancong.cn
- * @github:  github.com/lihancong/enc
  */
 
 
