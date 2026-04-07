@@ -18,16 +18,17 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Setup PHP SDK
+      shell: powershell
       run: |
         Invoke-WebRequest -Uri "https://github.com/php/php-sdk-binary-tools/archive/refs/heads/master.zip" -OutFile sdk.zip
         Expand-Archive sdk.zip -DestinationPath .
         Move-Item php-sdk-binary-tools-master phpsdk
 
     - name: Build extension
-      shell: powershell
+      shell: cmd
       run: |
         cd phpsdk
-        .\phpsdk-starter.bat -c vs16 -a ${{ matrix.arch }} -v ${{ matrix.php-version }} -t "$env:GITHUB_WORKSPACE" -s "$env:GITHUB_WORKSPACE" -b build -- `
+        .\phpsdk-starter.bat -c vs16 -a ${{ matrix.arch }} -v ${{ matrix.php-version }} -t "%GITHUB_WORKSPACE%" -s "%GITHUB_WORKSPACE%" -b build -- ^
           phpize && configure --enable-myext --enable-zts && nmake
 
     - name: Find and package DLL
