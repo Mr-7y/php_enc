@@ -1,31 +1,45 @@
-name: Build PHP Extension
+name: Build PHP Extension for Windows
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # 允许手动触发
 
 jobs:
   build:
     runs-on: windows-2019
+    strategy:
+      matrix:
+        php-version: [ '8.3' ]
+        arch: [ 'x64' ]
+        zts: [ true ]  # 设为 true 可编译线程安全版
+
     steps:
-      - uses: actions/checkout@v4
-      
-      # 下载并设置 PHP SDK
-      - name: Setup PHP SDK
-        run: |
-          curl -L https://github.com/php/php-sdk-binary-tools/archive/master.zip -o sdk.zip
-          tar -xf sdk.zip
-          ren php-sdk-binary-tools-master phpsdk
+    - uses: actions/checkout@v4
 
-      # 编译扩展
-      - name: Build extension
-        run: |
-          cd phpsdk
-          call phpsdk-starter.bat -c vs16 -a x64 -t "%GITHUB_WORKSPACE%" -s "%GITHUB_WORKSPACE%" -b build -- ^
-            phpize && configure --enable-your_ext_name --disable-zts && nmake
-        shell: cmd
+    - name: Setup PHP SDK
+      run: |
+        Invoke-WebRequest -Uri "https://github.com/php/php-sdk-binary-tools/archive/refs/heads/master.zip" -OutFile sdk.zip
+        Expand-Archive sdk.zip -DestinationPath .
+        Move-Item php-sdk-binary-tools-master phpsdk
 
-      # 打包并上传结果
-      - name: Upload DLL
-        uses: actions/upload-artifact@v4
-        with:
-          name: php_your_ext_name.dll
-          path: phpsdk/build/Release*/php_your_ext_name.dll
+    - name: Build extension
+      shell: cmd
+      run: |
+        cd phpsdk
+        call phpsdk-starter.bat -c vs16 -a ${{ matrix.arch }} -t "%GITHUB_WORKSPACE%" -s "%GITHUB_WORKSPACE%" -b build -- ^
+          phpize && configure --enable-myext $(if (${{ matrix.zts }}) { "--enable-zts" } else { "--disable-zts" }) && nmake
+
+    - name: Package DLL
+      run: |
+        $arch = if ("${{ matrix.arch }}" -eq "x64") { "x64" } else { "x86" }
+        $zts_suffix = if (${{ matrix.zts }}) { "-ts" } else { "" }
+        $zip_name = "php_myext-${{ matrix.php-version }}${zts_suffix}-vs16-${arch}.zip"
+        Compress-Archive -Path "phpsdk\build\Release*\php_myext.dll" -DestinationPath $zip_name
+        echo "ARTIFACT_NAME=$zip_name" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.ARTIFACT_NAME }}
+        path: ${{ env.ARTIFACT_NAME }}
