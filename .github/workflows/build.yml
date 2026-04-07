@@ -1,0 +1,31 @@
+name: Build PHP Extension
+
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: windows-2019
+    steps:
+      - uses: actions/checkout@v4
+      
+      # 下载并设置 PHP SDK
+      - name: Setup PHP SDK
+        run: |
+          curl -L https://github.com/php/php-sdk-binary-tools/archive/master.zip -o sdk.zip
+          tar -xf sdk.zip
+          ren php-sdk-binary-tools-master phpsdk
+
+      # 编译扩展
+      - name: Build extension
+        run: |
+          cd phpsdk
+          call phpsdk-starter.bat -c vs16 -a x64 -t "%GITHUB_WORKSPACE%" -s "%GITHUB_WORKSPACE%" -b build -- ^
+            phpize && configure --enable-your_ext_name --disable-zts && nmake
+        shell: cmd
+
+      # 打包并上传结果
+      - name: Upload DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: php_your_ext_name.dll
+          path: phpsdk/build/Release*/php_your_ext_name.dll
