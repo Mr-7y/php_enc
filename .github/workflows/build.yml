@@ -3,7 +3,7 @@ name: Build PHP Extension for Windows (ZTS)
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   build:
@@ -12,40 +12,38 @@ jobs:
       matrix:
         php-version: [ '8.3' ]
         arch: [ 'x64' ]
-        zts: [ true ]  # 启用线程安全（ZTS）
+        zts: [ true ]
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Setup PHP SDK
-      shell: powershell
-      run: |
-        Invoke-WebRequest -Uri "https://github.com/php/php-sdk-binary-tools/archive/refs/heads/master.zip" -OutFile sdk.zip
-        Expand-Archive sdk.zip -DestinationPath .
-        Move-Item php-sdk-binary-tools-master phpsdk
+    - name: Setup PHP (with dev headers)
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ matrix.php-version }}
+        extensions: mbstring, zip
+        ini-values: date.timezone=UTC
+
+    - name: Install Visual Studio Build Tools
+      uses: ilammy/msvc-dev-cmd@v1
+      # 自动配置 vcvarsall.bat 环境
 
     - name: Build extension
       shell: cmd
       run: |
-        cd phpsdk
-        .\phpsdk-starter.bat -c vs16 -a ${{ matrix.arch }} -v ${{ matrix.php-version }} -t "%GITHUB_WORKSPACE%" -s "%GITHUB_WORKSPACE%" -b build -- ^
-          phpize && configure --enable-myext --enable-zts && nmake
+        cd %GITHUB_WORKSPACE%
+        phpize
+        configure --enable-php_enc --enable-zts
+        nmake
 
     - name: Find and package DLL
       shell: powershell
       run: |
-        # 在 build 目录下递归查找 php_myext.dll
-        $dllPath = Get-ChildItem -Path build -Recurse -Include "php_myext.dll" | Select-Object -First 1
-        if (-not $dllPath) {
-          Write-Error "❌ Failed to find php_myext.dll!"
-          exit 1
-        }
-        Write-Host "✅ Found DLL at: $($dllPath.FullName)"
-        
-        # 生成带 ZTS 标识的文件名
-        $zipName = "php_myext-${{ matrix.php-version }}-ts-vs16-x64.zip"
-        Compress-Archive -Path $dllPath.FullName -DestinationPath $zipName -Force
-        echo "ARTIFACT_NAME=$zipName" | Out-File -FilePath $env:GITHUB_ENV -Append
+        $dll = Get-ChildItem -Recurse -Filter "php_php_enc.dll" -Path . | Select-Object -First 1
+        if (-not $dll) { throw "DLL not found!" }
+        $zipName = "php_php_enc-${{ matrix.php-version }}-ts-vs16-x64.zip"
+        Compress-Archive -Path $dll.FullName -DestinationPath $zipName -Force
+        echo "ARTIFACT_NAME=$zipName" | Out-File $env:GITHUB_ENV -Append
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
