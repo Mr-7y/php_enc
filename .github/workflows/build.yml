@@ -1,8 +1,8 @@
-name: Build PHP Extension for Windows (ZTS)
+name: Build php_enc for Windows (ZTS)
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -10,43 +10,66 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        php-version: [ '8.3' ]
-        arch: [ 'x64' ]
-        zts: [ true ]
+        php-version: ['8.3']
+        arch: ['x64']
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Setup PHP (with dev headers)
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: ${{ matrix.php-version }}
-        extensions: mbstring, zip
-        ini-values: date.timezone=UTC
+      - name: Setup PHP 8.3 with Dev Kit
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          extensions: mbstring, zip
+          # 关键：启用开发头文件
+          tools: composer
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Install Visual Studio Build Tools
-      uses: ilammy/msvc-dev-cmd@v1
-      # 自动配置 vcvarsall.bat 环境
+      - name: Install VS Build Tools (required for nmake)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
 
-    - name: Build extension
-      shell: cmd
-      run: |
-        cd %GITHUB_WORKSPACE%
-        phpize
-        configure --enable-php_enc --enable-zts
-        nmake
+      - name: Verify phpize exists
+        shell: cmd
+        run: |
+          where phpize
+          phpize --version
 
-    - name: Find and package DLL
-      shell: powershell
-      run: |
-        $dll = Get-ChildItem -Recurse -Filter "php_php_enc.dll" -Path . | Select-Object -First 1
-        if (-not $dll) { throw "DLL not found!" }
-        $zipName = "php_php_enc-${{ matrix.php-version }}-ts-vs16-x64.zip"
-        Compress-Archive -Path $dll.FullName -DestinationPath $zipName -Force
-        echo "ARTIFACT_NAME=$zipName" | Out-File $env:GITHUB_ENV -Append
+      - name: Generate configure script
+        shell: cmd
+        run: |
+          cd %GITHUB_WORKSPACE%
+          phpize
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ env.ARTIFACT_NAME }}
-        path: ${{ env.ARTIFACT_NAME }}
+      - name: Configure extension (ZTS enabled)
+        shell: cmd
+        run: |
+          cd %GITHUB_WORKSPACE%
+          configure --enable-php_enc --enable-zts
+
+      - name: Build DLL
+        shell: cmd
+        run: |
+          cd %GITHUB_WORKSPACE%
+          nmake
+
+      - name: Find and package DLL
+        shell: powershell
+        run: |
+          $dll = Get-ChildItem -Recurse -Filter "php_php_enc.dll" -Path . | Select-Object -First 1
+          if (-not $dll) {
+            # 尝试常见路径
+            $dll = Get-ChildItem -Path "modules" -Filter "php_php_enc.dll" | Select-Object -First 1
+          }
+          if (-not $dll) { throw "❌ php_php_enc.dll NOT FOUND! Check nmake output." }
+          $zipName = "php_php_enc-${{ matrix.php-version }}-ts-vs16-x64.zip"
+          Compress-Archive -Path $dll.FullName -DestinationPath $zipName -Force
+          echo "ARTIFACT_NAME=$zipName" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_NAME }}
