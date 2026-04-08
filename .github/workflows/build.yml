@@ -27,6 +27,8 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: ${{ matrix.arch }}
+          # 关键：VS2019 工具集 (v14.29)
+          toolset: 14.29
 
       - name: Prepare PHP Build Environment
         shell: cmd
@@ -37,11 +39,10 @@ jobs:
       - name: Copy Extension to PHP Source
         shell: powershell
         run: |
-          # 复制你的扩展到 ext/php_enc
           New-Item -ItemType Directory -Path "php-src/ext/php_enc"
           Copy-Item "*.c", "*.h", "config.m4" -Destination "php-src/ext/php_enc"
 
-      - name: Configure PHP with php_enc
+      - name: Configure PHP with php_enc  # ⬅️ 关键修改在这里
         shell: cmd
         run: |
           cd php-src
@@ -50,6 +51,7 @@ jobs:
             --enable-cli ^
             --enable-zts ^
             --enable-php_enc ^
+            --with-tools-version=14.29 ^  # ← 强制指定工具链版本
             --with-php-build="C:\php-sdk\phpdev"
 
       - name: Build Extension DLL
@@ -63,7 +65,7 @@ jobs:
         run: |
           $dll = Get-ChildItem -Recurse -Filter "php_php_enc.dll" -Path "php-src" | Select-Object -First 1
           if (-not $dll) { throw "❌ DLL NOT FOUND!" }
-          $zipName = "php_php_enc-8.3-ts-vs17-x64.zip"
+          $zipName = "php_php_enc-8.3-ts-vs16-x64.zip"
           Compress-Archive -Path $dll.FullName -DestinationPath $zipName -Force
           echo "ARTIFACT_NAME=$zipName" | Out-File $env:GITHUB_ENV -Append
 
