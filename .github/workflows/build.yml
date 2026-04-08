@@ -1,4 +1,4 @@
-name: Build php_enc for PHP 8.4 (Windows, ZTS)
+name: Build php_enc for PHP 8.5 (Windows, ZTS)
 
 on:
   push:
@@ -12,41 +12,36 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download PHP 8.4 Source (master branch)
+      - name: Download PHP 8.5 Source (master branch)
         shell: powershell
         run: |
           Invoke-WebRequest -Uri "https://github.com/php/php-src/archive/refs/heads/master.zip" -OutFile php-src.zip
           Expand-Archive php-src.zip -DestinationPath .
           Move-Item php-src-master php-src
 
-      - name: Run buildconf to generate configure script
+      - name: Setup MSVC Dev Environment (VS2022, x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Generate configure script
         shell: cmd
         run: |
           cd php-src
           buildconf --force
 
-      - name: Copy your extension into ext/php_enc
+      - name: Copy extension source to ext/php_enc
         shell: powershell
         run: |
           New-Item -ItemType Directory -Path "php-src/ext/php_enc" -Force
           Copy-Item "*.c", "*.h", "config.m4" -Destination "php-src/ext/php_enc" -ErrorAction SilentlyContinue
 
-      - name: Configure and Build with MSVC 14.38 (FULLY COMPATIBLE)
+      - name: Configure and Build PHP 8.5 Extension (Native MSVC 14.44)
         shell: cmd
         run: |
           cd php-src
 
-          :: Activate MSVC 14.38 toolset explicitly
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat" -vcvars_ver=14.38
-
-          :: Verify compiler version (must show 19.38.x)
-          cl 2>&1 | findstr /C:"19.38"
-          if %ERRORLEVEL% NEQ 0 (
-            echo ERROR: Failed to activate MSVC 14.38 toolchain!
-            exit /b 1
-          )
-
-          :: Configure PHP with your extension
+          :: No need to specify tools version — PHP 8.5 supports 14.44 natively!
           configure ^
             --disable-all ^
             --enable-cli ^
@@ -61,10 +56,10 @@ jobs:
         run: |
           $dll = Get-ChildItem -Recurse -Filter "php_php_enc.dll" -Path "php-src" | Select-Object -First 1
           if (-not $dll) {
-            Write-Error "❌ php_php_enc.dll not found after build!"
+            Write-Error "❌ php_php_enc.dll not found!"
             exit 1
           }
-          $zipName = "php_php_enc-8.4-ts-vs17-x64.zip"
+          $zipName = "php_php_enc-8.5-ts-vs17-x64.zip"
           Compress-Archive -Path $dll.FullName -DestinationPath $zipName -Force
           echo "ARTIFACT_NAME=$zipName" >> $env:GITHUB_ENV
 
