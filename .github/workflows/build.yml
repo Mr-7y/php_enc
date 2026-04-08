@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2019  # ← 关键：使用 windows-2019 而非 windows-latest
     strategy:
       matrix:
         php-version: ['8.3']
@@ -23,12 +23,11 @@ jobs:
           Expand-Archive php-src.zip -DestinationPath .
           Move-Item php-src-PHP-8.3 php-src
 
-      - name: Install Visual Studio Build Tools
+      - name: Install VS 2019 Build Tools
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: ${{ matrix.arch }}
-          # 关键：VS2019 工具集 (v14.29)
-          toolset: 14.29
+          # 不指定 toolset，windows-2019 runner 默认提供 VS2019 (14.29)
 
       - name: Prepare PHP Build Environment
         shell: cmd
@@ -42,7 +41,7 @@ jobs:
           New-Item -ItemType Directory -Path "php-src/ext/php_enc"
           Copy-Item "*.c", "*.h", "config.m4" -Destination "php-src/ext/php_enc"
 
-      - name: Configure PHP with php_enc  # ⬅️ 关键修改在这里
+      - name: Configure PHP with php_enc
         shell: cmd
         run: |
           cd php-src
@@ -50,9 +49,8 @@ jobs:
             --disable-all ^
             --enable-cli ^
             --enable-zts ^
-            --enable-php_enc ^
-            --with-tools-version=14.29 ^  # ← 强制指定工具链版本
-            --with-php-build="C:\php-sdk\phpdev"
+            --enable-php_enc
+          # ← 移除 --with-tools-version 和 --with-php-build
 
       - name: Build Extension DLL
         shell: cmd
