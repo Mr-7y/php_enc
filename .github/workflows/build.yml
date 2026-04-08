@@ -1,4 +1,4 @@
-name: Build php_enc for Windows (ZTS)
+name: Build php_enc for PHP 8.4 (Windows, ZTS)
 
 on:
   push:
@@ -7,41 +7,37 @@ on:
 
 jobs:
   build:
-    runs-on: windows-2019  # ← 关键：使用 windows-2019 而非 windows-latest
-    strategy:
-      matrix:
-        php-version: ['8.3']
-        arch: ['x64']
-
+    runs-on: windows-latest  # ← 使用最新 runner，无排队
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download PHP 8.3 Source
+      - name: Download PHP 8.4 Source
         shell: powershell
         run: |
-          Invoke-WebRequest -Uri "https://github.com/php/php-src/archive/refs/heads/PHP-8.3.zip" -OutFile php-src.zip
+          # PHP 8.4 is in active development (branch: master)
+          Invoke-WebRequest -Uri "https://github.com/php/php-src/archive/refs/heads/master.zip" -OutFile php-src.zip
           Expand-Archive php-src.zip -DestinationPath .
-          Move-Item php-src-PHP-8.3 php-src
+          Move-Item php-src-master php-src
 
-      - name: Install VS 2019 Build Tools
+      - name: Setup VS 2022 Build Environment
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: ${{ matrix.arch }}
-          # 不指定 toolset，windows-2019 runner 默认提供 VS2019 (14.29)
+          arch: x64
+          # No toolset override needed — PHP 8.4 expects VS2022
 
-      - name: Prepare PHP Build Environment
+      - name: Generate configure script
         shell: cmd
         run: |
           cd php-src
           buildconf --force
 
-      - name: Copy Extension to PHP Source
+      - name: Copy your extension into ext/
         shell: powershell
         run: |
-          New-Item -ItemType Directory -Path "php-src/ext/php_enc"
-          Copy-Item "*.c", "*.h", "config.m4" -Destination "php-src/ext/php_enc"
+          New-Item -ItemType Directory -Path "php-src/ext/php_enc" -Force
+          Copy-Item "*.c", "*.h", "config.m4" -Destination "php-src/ext/php_enc" -ErrorAction SilentlyContinue
 
-      - name: Configure PHP with php_enc
+      - name: Configure PHP 8.4 with your extension
         shell: cmd
         run: |
           cd php-src
@@ -50,22 +46,22 @@ jobs:
             --enable-cli ^
             --enable-zts ^
             --enable-php_enc
-          # ← 移除 --with-tools-version 和 --with-php-build
+          # PHP 8.4 auto-detects VS2022 (v14.3x+), no extra flags needed
 
-      - name: Build Extension DLL
+      - name: Build the extension DLL
         shell: cmd
         run: |
           cd php-src
           nmake php_php_enc.dll
 
-      - name: Find and package DLL
+      - name: Package the DLL
         shell: powershell
         run: |
           $dll = Get-ChildItem -Recurse -Filter "php_php_enc.dll" -Path "php-src" | Select-Object -First 1
-          if (-not $dll) { throw "❌ DLL NOT FOUND!" }
-          $zipName = "php_php_enc-8.3-ts-vs16-x64.zip"
+          if (-not $dll) { throw "❌ Failed to find php_php_enc.dll!" }
+          $zipName = "php_php_enc-8.4-ts-vs17-x64.zip"
           Compress-Archive -Path $dll.FullName -DestinationPath $zipName -Force
-          echo "ARTIFACT_NAME=$zipName" | Out-File $env:GITHUB_ENV -Append
+          echo "ARTIFACT_NAME=$zipName" >> $env:GITHUB_ENV
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
