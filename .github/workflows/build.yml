@@ -1,4 +1,4 @@
-name: Build php_enc Extension for PHP 8.4
+name: Build php_enc for PHP 8.4 (Windows, ZTS)
 
 on:
   push:
@@ -19,50 +19,51 @@ jobs:
           Expand-Archive php-src.zip -DestinationPath .
           Move-Item php-src-master php-src
 
-      - name: Setup MSVC Dev Environment (VS2022)
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
-      # 关键步骤：生成 configure 脚本
-      - name: Run buildconf
+      - name: Run buildconf to generate configure script
         shell: cmd
         run: |
           cd php-src
           buildconf --force
 
-      # 将你的扩展源码复制到 ext/ 目录
-      - name: Copy extension source
+      - name: Copy your extension into ext/php_enc
         shell: powershell
         run: |
           New-Item -ItemType Directory -Path "php-src/ext/php_enc" -Force
           Copy-Item "*.c", "*.h", "config.m4" -Destination "php-src/ext/php_enc" -ErrorAction SilentlyContinue
 
-      # 核心修复：指定兼容的工具链版本 14.38
-      - name: Configure PHP with php_enc
+      - name: Configure and Build with MSVC 14.38 (FULLY COMPATIBLE)
         shell: cmd
         run: |
           cd php-src
+
+          :: Activate MSVC 14.38 toolset explicitly
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat" -vcvars_ver=14.38
+
+          :: Verify compiler version (must show 19.38.x)
+          cl 2>&1 | findstr /C:"19.38"
+          if %ERRORLEVEL% NEQ 0 (
+            echo ERROR: Failed to activate MSVC 14.38 toolchain!
+            exit /b 1
+          )
+
+          :: Configure PHP with your extension
           configure ^
             --disable-all ^
             --enable-cli ^
             --enable-zts ^
-            --enable-php_enc ^
-            --with-tools-version=14.38
+            --enable-php_enc
 
-      # 编译扩展 DLL
-      - name: Build the extension
-        shell: cmd
-        run: |
-          cd php-src
+          :: Build the DLL
           nmake php_php_enc.dll
 
-      # 打包并上传
-      - name: Package and upload artifact
+      - name: Package the extension DLL
         shell: powershell
         run: |
           $dll = Get-ChildItem -Recurse -Filter "php_php_enc.dll" -Path "php-src" | Select-Object -First 1
-          if (-not $dll) { throw "❌ php_php_enc.dll not found!" }
+          if (-not $dll) {
+            Write-Error "❌ php_php_enc.dll not found after build!"
+            exit 1
+          }
           $zipName = "php_php_enc-8.4-ts-vs17-x64.zip"
           Compress-Archive -Path $dll.FullName -DestinationPath $zipName -Force
           echo "ARTIFACT_NAME=$zipName" >> $env:GITHUB_ENV
