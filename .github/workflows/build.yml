@@ -16,55 +16,54 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup PHP 8.3 with Dev Kit
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: ${{ matrix.php-version }}
-          extensions: mbstring, zip
-          # 关键：启用开发头文件
-          tools: composer
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download PHP 8.3 Source
+        shell: powershell
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/php/php-src/archive/refs/heads/PHP-8.3.zip" -OutFile php-src.zip
+          Expand-Archive php-src.zip -DestinationPath .
+          Move-Item php-src-PHP-8.3 php-src
 
-      - name: Install VS Build Tools (required for nmake)
+      - name: Install Visual Studio Build Tools
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: ${{ matrix.arch }}
 
-      - name: Verify phpize exists
+      - name: Prepare PHP Build Environment
         shell: cmd
         run: |
-          where phpize
-          phpize --version
+          cd php-src
+          buildconf --force
 
-      - name: Generate configure script
-        shell: cmd
+      - name: Copy Extension to PHP Source
+        shell: powershell
         run: |
-          cd %GITHUB_WORKSPACE%
-          phpize
+          # 复制你的扩展到 ext/php_enc
+          New-Item -ItemType Directory -Path "php-src/ext/php_enc"
+          Copy-Item "*.c", "*.h", "config.m4" -Destination "php-src/ext/php_enc"
 
-      - name: Configure extension (ZTS enabled)
+      - name: Configure PHP with php_enc
         shell: cmd
         run: |
-          cd %GITHUB_WORKSPACE%
-          configure --enable-php_enc --enable-zts
+          cd php-src
+          configure ^
+            --disable-all ^
+            --enable-cli ^
+            --enable-zts ^
+            --enable-php_enc ^
+            --with-php-build="C:\php-sdk\phpdev"
 
-      - name: Build DLL
+      - name: Build Extension DLL
         shell: cmd
         run: |
-          cd %GITHUB_WORKSPACE%
-          nmake
+          cd php-src
+          nmake php_php_enc.dll
 
       - name: Find and package DLL
         shell: powershell
         run: |
-          $dll = Get-ChildItem -Recurse -Filter "php_php_enc.dll" -Path . | Select-Object -First 1
-          if (-not $dll) {
-            # 尝试常见路径
-            $dll = Get-ChildItem -Path "modules" -Filter "php_php_enc.dll" | Select-Object -First 1
-          }
-          if (-not $dll) { throw "❌ php_php_enc.dll NOT FOUND! Check nmake output." }
-          $zipName = "php_php_enc-${{ matrix.php-version }}-ts-vs16-x64.zip"
+          $dll = Get-ChildItem -Recurse -Filter "php_php_enc.dll" -Path "php-src" | Select-Object -First 1
+          if (-not $dll) { throw "❌ DLL NOT FOUND!" }
+          $zipName = "php_php_enc-8.3-ts-vs17-x64.zip"
           Compress-Archive -Path $dll.FullName -DestinationPath $zipName -Force
           echo "ARTIFACT_NAME=$zipName" | Out-File $env:GITHUB_ENV -Append
 
