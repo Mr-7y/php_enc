@@ -1,0 +1,70 @@
+name: Build php_enc for PHP 8.5 (Windows, ZTS)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download PHP 8.5 Source (master branch)
+        shell: powershell
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/php/php-src/archive/refs/heads/master.zip" -OutFile php-src.zip
+          Expand-Archive php-src.zip -DestinationPath .
+          Move-Item php-src-master php-src
+
+      - name: Setup MSVC Dev Environment (VS2022, x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Generate configure script
+        shell: cmd
+        run: |
+          cd php-src
+          buildconf --force
+
+      - name: Copy extension source to ext/php_enc
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Path "php-src/ext/php_enc" -Force
+          Copy-Item "*.c", "*.h", "config.m4" -Destination "php-src/ext/php_enc" -ErrorAction SilentlyContinue
+
+      - name: Configure and Build PHP 8.5 Extension (Native MSVC 14.44)
+        shell: cmd
+        run: |
+          cd php-src
+
+          :: No need to specify tools version — PHP 8.5 supports 14.44 natively!
+          configure ^
+            --disable-all ^
+            --enable-cli ^
+            --enable-zts ^
+            --enable-php_enc
+
+          :: Build the DLL
+          nmake php_php_enc.dll
+
+      - name: Package the extension DLL
+        shell: powershell
+        run: |
+          $dll = Get-ChildItem -Recurse -Filter "php_php_enc.dll" -Path "php-src" | Select-Object -First 1
+          if (-not $dll) {
+            Write-Error "❌ php_php_enc.dll not found!"
+            exit 1
+          }
+          $zipName = "php_php_enc-8.5-ts-vs17-x64.zip"
+          Compress-Archive -Path $dll.FullName -DestinationPath $zipName -Force
+          echo "ARTIFACT_NAME=$zipName" >> $env:GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_NAME }}
