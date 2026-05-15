@@ -7,72 +7,69 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        php-version: ['8.3']
-        ts: ['ts', 'nts']
-        arch: ['x64']
-
+    runs-on: windows-2022
+    
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download PHP 8.3 Source
-        shell: powershell
-        run: |
-          Invoke-WebRequest -Uri "https://github.com/php/php-src/archive/refs/tags/php-8.3.0.zip" -OutFile php-src.zip
-          Expand-Archive php-src.zip -DestinationPath .
-          Move-Item php-src-php-8.3.0 php-src
-
-      - name: Setup MSVC Dev Environment (VS2022, x64)
+      - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
 
-      - name: Generate configure script
+      - name: Install build tools
+        shell: powershell
+        run: |
+          choco install winflexbison3 -y
+
+      - name: Get PHP source
+        shell: cmd
+        run: |
+          git clone --depth=1 --branch=php-8.3.0 https://github.com/php/php-src.git
+
+      - name: Prepare extension
+        shell: cmd
+        run: |
+          mkdir php-src\ext\enc
+          copy enc.c php-src\ext\enc\
+          copy core.h php-src\ext\enc\
+          copy php_enc.h php-src\ext\enc\
+          copy enc_arginfo.h php-src\ext\enc\
+          copy config.w32 php-src\ext\enc\
+          copy config.m4 php-src\ext\enc\
+
+      - name: Buildconf
         shell: cmd
         run: |
           cd php-src
           buildconf --force
 
-      - name: Copy extension source to ext/php_enc
-        shell: powershell
-        run: |
-          New-Item -ItemType Directory -Path "php-src/ext/php_enc" -Force
-          Copy-Item "*.c", "*.h", "config.m4", "config.w32" -Destination "php-src/ext/php_enc" -ErrorAction SilentlyContinue
-
-      - name: Configure and Build PHP 8.3 Extension
+      - name: Configure
         shell: cmd
         run: |
           cd php-src
+          configure --disable-all --enable-cli --enable-enc=shared
 
-          set ZTS_FLAG=
-          if "${{ matrix.ts }}"=="ts" set ZTS_FLAG=--enable-zts
+      - name: Make
+        shell: cmd
+        run: |
+          cd php-src
+          nmake
 
-          configure ^
-            --disable-all ^
-            --enable-cli ^
-            %ZTS_FLAG% ^
-            --enable-enc
-
-          :: Build the DLL
-          nmake php_enc.dll
-
-      - name: Package the extension DLL
+      - name: Package
         shell: powershell
         run: |
-          $dll = Get-ChildItem -Recurse -Filter "php_enc.dll" -Path "php-src" | Select-Object -First 1
+          $dll = Get-ChildItem -Path php-src -Recurse -Filter php_enc.dll | Select-Object -First 1
           if (-not $dll) {
-            Write-Error "❌ php_enc.dll not found!"
+            Write-Host "ERROR: php_enc.dll not found"
             exit 1
           }
-          $zipName = "php_enc-8.3-${{ matrix.ts }}-vs16-${{ matrix.arch }}.zip"
-          Compress-Archive -Path $dll.FullName -DestinationPath $zipName -Force
-          echo "ARTIFACT_NAME=$zipName" >> $env:GITHUB_ENV
+          $zip = "php_enc-8.3-nts-vs17-x64.zip"
+          Compress-Archive $dll.FullName $zip
+          "ARTIFACT_NAME=$zip" | Out-File $env:GITHUB_ENV -Append
 
-      - name: Upload artifact
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}
