@@ -53,12 +53,12 @@ zend_op_array *cgi_compile_file(zend_file_handle *file_handle, int type)
     ENC_RES res = 0;
 
     /* FIXME: If in cli mode with no args */
-    if (!strcmp(file_handle->filename, "-"))
+    if (!strcmp(ZSTR_VAL(file_handle->filename), "-"))
         goto final;
 
     /* Skip if phar */
     int size_phar = sizeof("phar") - 1;
-    if (strlen(file_handle->filename) > size_phar && !memcmp(file_handle->filename, "phar", size_phar)) {
+    if (ZSTR_LEN(file_handle->filename) > size_phar && !memcmp(ZSTR_VAL(file_handle->filename), "phar", size_phar)) {
         goto final;
     }
 
@@ -84,7 +84,7 @@ zend_op_array *cgi_compile_file(zend_file_handle *file_handle, int type)
         fclose(fp);
         goto final;
     }
-    if (enc_ext_fopen(fp, &stat_buf, &res, file_handle->filename))
+    if (enc_ext_fopen(fp, &stat_buf, &res, ZSTR_VAL(file_handle->filename)))
         goto final;
 
     if (file_handle->type == ZEND_HANDLE_FP) fclose(file_handle->handle.fp);
@@ -118,7 +118,11 @@ int enc_ext_fopen(FILE *fp, struct stat *stat_buf, ENC_RES *res, const char *fil
     data_len = stat_buf->st_size - sizeof(enc_header);
     p_data = (char *) emalloc(data_len);
     fseek(fp, sizeof(enc_header), SEEK_SET);
-    fread(p_data, data_len, 1, fp);
+    if (fread(p_data, data_len, 1, fp) != 1) {
+        efree(p_data);
+        fclose(fp);
+        return -3;
+    }
     fclose(fp);
 
     enc_decode(p_data, data_len);

@@ -1,4 +1,4 @@
-name: Build php_enc for PHP 8.3 (Windows)
+name: Build php_enc for PHP 8.3
 
 on:
   push:
@@ -6,7 +6,62 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-linux:
+    runs-on: ubuntu-24.04
+    container: php:8.3-cli
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y autoconf bison re2c libxml2-dev pkg-config
+
+      - name: Get PHP source
+        run: |
+          php -v
+          git clone --depth=1 --branch=php-8.3.0 https://github.com/php/php-src.git
+
+      - name: Prepare extension
+        run: |
+          mkdir php-src/ext/enc
+          cp enc.c php-src/ext/enc/
+          cp core.h php-src/ext/enc/
+          cp php_enc.h php-src/ext/enc/
+          cp enc_arginfo.h php-src/ext/enc/
+          cp config.m4 php-src/ext/enc/
+
+      - name: Buildconf
+        run: |
+          cd php-src
+          ./buildconf --force
+
+      - name: Configure
+        run: |
+          cd php-src
+          ./configure --disable-all --enable-cli --enable-enc=shared
+
+      - name: Make
+        run: |
+          cd php-src
+          make -j$(nproc)
+
+      - name: Package
+        run: |
+          find php-src -name "enc.so" -type f
+          mkdir -p dist
+          cp $(find php-src -name "enc.so" -type f | head -n1) dist/
+          tar -czvf php_enc-8.3-linux-x86_64.tar.gz -C dist .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: php_enc-8.3-linux-x86_64
+          path: php_enc-8.3-linux-x86_64.tar.gz
+
+  build-windows:
     runs-on: windows-2022
     
     steps:
@@ -69,7 +124,7 @@ jobs:
           Compress-Archive $dll.FullName $zip
           "ARTIFACT_NAME=$zip" | Out-File $env:GITHUB_ENV -Append
 
-      - name: Upload
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}
