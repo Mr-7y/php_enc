@@ -22,6 +22,7 @@
 PHP_FUNCTION(enc_encode)
 {
     zend_string *strg;
+    char *t;
 
     if (zend_parse_parameters(ZEND_NUM_ARGS(), "S", &strg) == FAILURE) {
         return;
@@ -32,7 +33,7 @@ PHP_FUNCTION(enc_encode)
         RETURN_FALSE;
     }
 
-    char *t = emalloc(sizeof(enc_header) + ZSTR_LEN(strg));
+    t = emalloc(sizeof(enc_header) + ZSTR_LEN(strg));
     memcpy(t, enc_header, sizeof(enc_header));
     if (ZSTR_LEN(strg) > 0) {
         enc_encode(ZSTR_VAL(strg), ZSTR_LEN(strg));
