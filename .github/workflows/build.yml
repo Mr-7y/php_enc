@@ -1,4 +1,4 @@
-name: Build php_enc for Windows (ZTS)
+name: Build php_enc Extension
 
 on:
   push:
@@ -6,67 +6,88 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: windows-2019
-    strategy:
-      matrix:
-        php-version: ['8.3']
-        arch: ['x64']
-
+  build-linux:
+    name: Build for Linux (PHP 8.3+)
+    runs-on: ubuntu-latest
+    
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download PHP 8.3 Source
-        shell: powershell
-        run: |
-          Invoke-WebRequest -Uri "https://github.com/php/php-src/archive/refs/heads/PHP-8.3.zip" -OutFile php-src.zip
-          Expand-Archive php-src.zip -DestinationPath .
-          Move-Item php-src-PHP-8.3 php-src
-
-      - name: Install VS 2019 Build Tools
-        uses: ilammy/msvc-dev-cmd@v1
+      - name: Setup PHP 8.3
+        uses: shivammathur/setup-php@v2
         with:
-          arch: ${{ matrix.arch }}
+          php-version: '8.3'
+          extensions: none
+          tools: phpize, php-config
 
-      - name: Prepare PHP Build Environment
-        shell: cmd
+      - name: Install dependencies
         run: |
-          cd php-src
-          buildconf --force
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool bison re2c pkg-config
 
-      - name: Copy Extension to PHP Source
-        shell: powershell
+      - name: Build extension
         run: |
-          New-Item -ItemType Directory -Path "php-src/ext/enc"
-          Copy-Item "*.c", "*.h", "config.m4", "config.w32" -Destination "php-src/ext/enc"
+          phpize
+          ./configure --enable-enc
+          make -j$(nproc)
 
-      - name: Configure PHP with enc
-        shell: cmd
+      - name: Package
         run: |
-          cd php-src
-          configure ^
-            --disable-all ^
-            --enable-cli ^
-            --enable-zts ^
-            --enable-enc
-
-      - name: Build Extension DLL
-        shell: cmd
-        run: |
-          cd php-src
-          nmake php_enc.dll
-
-      - name: Find and package DLL
-        shell: powershell
-        run: |
-          $dll = Get-ChildItem -Recurse -Filter "php_enc.dll" -Path "php-src" | Select-Object -First 1
-          if (-not $dll) { throw "❌ DLL NOT FOUND!" }
-          $zipName = "php_enc-8.3-ts-vs16-x64.zip"
-          Compress-Archive -Path $dll.FullName -DestinationPath $zipName -Force
-          echo "ARTIFACT_NAME=$zipName" | Out-File $env:GITHUB_ENV -Append
+          cp .libs/enc.so php_enc-8.3.so
+          tar -czf php_enc-8.3-linux-x86_64.tar.gz php_enc-8.3.so
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ARTIFACT_NAME }}
-          path: ${{ env.ARTIFACT_NAME }}
+          name: php_enc-8.3-linux
+          path: php_enc-8.3-linux-x86_64.tar.gz
+
+  build-windows:
+    name: Build for Windows (PHP 8.3 ZTS)
+    runs-on: windows-2019
+    timeout-minutes: 90
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Download PHP 8.3 source
+        run: |
+          git clone --depth=1 --branch=PHP-8.3.0 https://github.com/php/php-src.git php-src
+
+      - name: Copy extension files
+        run: |
+          mkdir php-src\ext\enc
+          copy enc.c php-src\ext\enc\
+          copy core.h php-src\ext\enc\
+          copy php_enc.h php-src\ext\enc\
+          copy enc_arginfo.h php-src\ext\enc\
+          copy config.m4 php-src\ext\enc\
+          copy config.w32 php-src\ext\enc\
+
+      - name: Buildconf
+        working-directory: php-src
+        run: buildconf --force
+
+      - name: Configure
+        working-directory: php-src
+        run: configure --disable-all --enable-cli --enable-zts --enable-enc
+
+      - name: Build
+        working-directory: php-src
+        run: nmake php_enc.dll
+
+      - name: Package DLL
+        run: |
+          copy php-src\php_enc.dll php_enc-8.3-ts.dll
+          Compress-Archive php_enc-8.3-ts.dll php_enc-8.3-windows-x64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: php_enc-8.3-windows
+          path: php_enc-8.3-windows-x64.zip

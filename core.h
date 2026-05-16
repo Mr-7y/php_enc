@@ -50,6 +50,7 @@ zend_op_array *cgi_compile_file(zend_file_handle *file_handle, int type)
     zend_string *opened_path;
     struct stat stat_buf;
     int data_len;
+    int size_phar;
     ENC_RES res = 0;
 
     /* FIXME: If in cli mode with no args */
@@ -57,7 +58,7 @@ zend_op_array *cgi_compile_file(zend_file_handle *file_handle, int type)
         goto final;
 
     /* Skip if phar */
-    int size_phar = sizeof("phar") - 1;
+    size_phar = sizeof("phar") - 1;
     if (ZSTR_LEN(file_handle->filename) > size_phar && !memcmp(ZSTR_VAL(file_handle->filename), "phar", size_phar)) {
         goto final;
     }
